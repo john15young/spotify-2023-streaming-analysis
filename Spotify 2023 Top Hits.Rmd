@@ -1,0 +1,72 @@
+---
+title: "Spotify 2023 Top Hits"
+output: html_notebook
+---
+```{r}
+library(readxl)
+spotify <- read_excel("~/Desktop/MKT Data Debrief/spotify-2023.xlsx")
+str(spotify)
+```
+```{r}
+# # Create logged versions of streams and playlists, then plot the raw relationship to check its shape
+spotify$log_streams   <- log(spotify$streams)
+spotify$log_playlists <- log(spotify$in_spotify_playlists + 1)
+
+plot(spotify$in_spotify_playlists, spotify$streams,
+     xlab = "Spotify playlists", ylab = "Streams",
+     main = "Raw")
+```
+
+```{r}
+# Remove 1 record with a corrupted streams value (Que Vuelvas, 2,762 streams)
+spotify <- spotify[spotify$streams > 10000, ]
+nrow(spotify)
+```
+
+```{r}
+# Re-plot on the log scale to confirm a clean linear relationship
+plot(spotify$log_playlists, spotify$log_streams,
+     xlab = "log(playlists)", ylab = "log(streams)")
+```
+
+```{r}
+# Regress streams on playlist placement, controlling for three audio features
+m <- lm(log_streams ~ log_playlists + `danceability_%` + `energy_%` + `valence_%`,
+        data = spotify)
+summary(m)
+```
+```{r}
+# Compare fit with and without audio features to see how much they actually add
+m_simple <- lm(log_streams ~ log_playlists, data = spotify)
+summary(m_simple)$r.squared
+summary(m)$r.squared
+```
+
+```{r}
+# Standardize all variables so coefficients can be compared on the same scale
+vars <- c("log_streams","log_playlists","danceability_%","energy_%","valence_%")
+z <- as.data.frame(scale(spotify[, vars]))
+names(z) <- c("log_streams","log_playlists","dance","energy","valence")
+m_std <- lm(log_streams ~ log_playlists + dance + energy + valence, data = z)
+round(coef(m_std), 3)
+```
+
+```{r}
+# Calculate each predictor's share of the explained variance
+library(relaimpo)
+imp <- calc.relimp(m, type = "lmg", rela = TRUE)
+round(imp$lmg * 100, 2)
+```
+
+```{r}
+png("scatter.png", width = 1600, height = 1300, res = 200)
+par(mar = c(4.5, 4.5, 1, 1))
+plot(spotify$log_playlists, spotify$log_streams,
+     xlab = "log(playlists)", ylab = "log(streams)",
+     pch = 16, col = rgb(0.11, 0.73, 0.33, 0.45), cex = 0.7)
+abline(lm(log_streams ~ log_playlists, data = spotify), col = "#C8102E", lwd = 2.5)
+dev.off()
+```
+
+
+
